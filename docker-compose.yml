@@ -1,0 +1,64 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: researchmind_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: researchuser
+      POSTGRES_PASSWORD: researchpassword
+      POSTGRES_DB: researchmind
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  chroma:
+    image: chromadb/chroma:latest
+    container_name: researchmind_chroma
+    restart: always
+    ports:
+      - "8000:8000"
+    volumes:
+      - chromadata:/chroma/data
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: researchmind_backend
+    restart: always
+    environment:
+      - DATABASE_URL=postgresql://researchuser:researchpassword@db:5432/researchmind
+      - CHROMA_DB_DIR=/chroma/data
+      - SECRET_KEY=production-secret-key-change-me
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+      - chroma
+    volumes:
+      - ./backend:/app
+      - uploads_data:/app/uploads
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: researchmind_frontend
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://backend:8000/api/v1
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:
+  chromadata:
+  uploads_data:
