@@ -64,19 +64,20 @@ interface ChatSession {
   created_at: string;
 }
 
-const MODEL_OPTIONS = [
-  { group: 'Google Gemini', provider: 'gemini', model: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash (Fast)' },
-  { group: 'Google Gemini', provider: 'gemini', model: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro (Deep)' },
-  { group: 'Google Gemini', provider: 'gemini', model: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
-  { group: 'OpenAI', provider: 'openai', model: 'gpt-4o-mini', label: 'GPT-4o Mini (Default)' },
-  { group: 'OpenAI', provider: 'openai', model: 'gpt-4o', label: 'GPT-4o (Advanced)' },
-  { group: 'OpenAI', provider: 'openai', model: 'o3-mini', label: 'o3 Mini (Reasoning)' },
+interface ModelOption {
+  group: string;
+  provider: string;
+  model: string;
+  label: string;
+}
+
+const DEFAULT_MODEL_OPTIONS: ModelOption[] = [
+  { group: 'Google Gemini', provider: 'gemini', model: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash' },
+  { group: 'OpenAI', provider: 'openai', model: 'gpt-4o-mini', label: 'GPT-4o Mini' },
   { group: 'Anthropic', provider: 'anthropic', model: 'claude-3-5-sonnet-20241022', label: 'Claude 3.5 Sonnet' },
-  { group: 'Anthropic', provider: 'anthropic', model: 'claude-3-haiku-20240307', label: 'Claude 3 Haiku' },
-  { group: 'Local Ollama', provider: 'ollama', model: 'llama3', label: 'Ollama (Llama 3)' },
-  { group: 'Local Ollama', provider: 'ollama', model: 'mistral', label: 'Ollama (Mistral)' },
-  { group: 'Local Ollama', provider: 'ollama', model: 'deepseek-r1', label: 'Ollama (DeepSeek R1)' },
+  { group: 'Local Ollama', provider: 'ollama', model: 'llama3', label: 'Ollama' },
 ];
+
 
 function WorkspaceContent() {
   const router = useRouter();
@@ -108,6 +109,7 @@ function WorkspaceContent() {
     provider: 'openai',
     model: 'gpt-4o-mini'
   });
+  const [modelOptions, setModelOptions] = useState<ModelOption[]>(DEFAULT_MODEL_OPTIONS);
 
   // Multi-File Chat Context & Scope
   const [chatScope, setChatScope] = useState<'current' | 'all'>('current');
@@ -136,7 +138,7 @@ function WorkspaceContent() {
     fetchPapers();
   }, []);
 
-  // Fetch user default setting for initial model
+  // Fetch user default setting for initial model and populate real models
   const fetchUserSettings = async () => {
     const token = localStorage.getItem('token');
     try {
@@ -150,6 +152,55 @@ function WorkspaceContent() {
             provider: data.model_provider,
             model: data.model_name
           });
+        }
+
+        const dynamicOptions: ModelOption[] = [];
+        const seen = new Set<string>();
+
+        const addOption = (provider: string, model: string, group: string, label: string) => {
+          const key = `${provider}::${model}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            dynamicOptions.push({ group, provider, model, label });
+          }
+        };
+
+        // Active model first
+        if (data.model_provider && data.model_name) {
+          const groupName = data.model_provider === 'ollama' ? 'Local Ollama' : data.model_provider === 'gemini' ? 'Google Gemini' : data.model_provider === 'anthropic' ? 'Anthropic' : 'OpenAI';
+          addOption(data.model_provider, data.model_name, groupName, `${data.model_name} (Active)`);
+        }
+
+        // Saved models from user profile
+        try {
+          if (data.api_keys_encrypted?.startsWith('{')) {
+            const parsed = JSON.parse(data.api_keys_encrypted);
+            if (Array.isArray(parsed.saved_models)) {
+              parsed.saved_models.forEach((sm: any) => {
+                const groupName = sm.provider === 'ollama' ? 'Local Ollama' : sm.provider === 'gemini' ? 'Google Gemini' : sm.provider === 'anthropic' ? 'Anthropic' : 'OpenAI';
+                addOption(sm.provider, sm.name, groupName, sm.name);
+              });
+            }
+          }
+        } catch (e) {}
+
+        // Query real local models from system
+        try {
+          const locRes = await fetch(`${apiBase}/settings/local-models`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (locRes.ok) {
+            const locData = await locRes.json();
+            if (locData.available && Array.isArray(locData.models)) {
+              locData.models.forEach((m: any) => {
+                addOption('ollama', m.name, 'Local Ollama', `${m.name}`);
+              });
+            }
+          }
+        } catch (e) {}
+
+        if (dynamicOptions.length > 0) {
+          setModelOptions(dynamicOptions);
         }
       }
     } catch (e) {
@@ -746,9 +797,9 @@ function WorkspaceContent() {
                       }}
                       className="bg-slate-900/90 border border-slate-800 text-slate-200 text-xs font-bold rounded-lg p-1.5 outline-none focus:border-indigo-500 cursor-pointer"
                     >
-                      {['Google Gemini', 'OpenAI', 'Anthropic', 'Local Ollama'].map(group => (
+                      {Array.from(new Set(modelOptions.map(opt => opt.group))).map(group => (
                         <optgroup key={group} label={group}>
-                          {MODEL_OPTIONS.filter(opt => opt.group === group).map(opt => (
+                          {modelOptions.filter(opt => opt.group === group).map(opt => (
                             <option key={`${opt.provider}::${opt.model}`} value={`${opt.provider}::${opt.model}`}>
                               {opt.label}
                             </option>
