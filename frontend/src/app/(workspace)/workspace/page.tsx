@@ -19,6 +19,7 @@ import {
   Copy,
   Check
 } from 'lucide-react';
+import MarkdownRenderer from '@/components/MarkdownRenderer';
 
 interface Paper {
   id: number;
@@ -282,19 +283,26 @@ function WorkspaceContent() {
         // Keep the last partial line in the buffer
         buffer = lines.pop() || '';
 
-        for (const line of lines) {
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i];
           if (line.startsWith('event: citations')) {
-            const dataLine = lines[lines.indexOf(line) + 1] || '';
+            const dataLine = lines[i + 1] || '';
             if (dataLine.startsWith('data: ')) {
-              const citations = JSON.parse(dataLine.replace('data: ', '').trim());
-              setStreamingCitations(citations);
+              try {
+                const citations = JSON.parse(dataLine.replace('data: ', '').trim());
+                setStreamingCitations(citations);
+              } catch (err) {}
             }
           }
           else if (line.startsWith('event: token')) {
-            const dataLine = lines[lines.indexOf(line) + 1] || '';
+            const dataLine = lines[i + 1] || '';
             if (dataLine.startsWith('data: ')) {
-              const parsed = JSON.parse(dataLine.replace('data: ', '').trim());
-              setStreamingMessage(prev => prev + parsed.token);
+              try {
+                const parsed = JSON.parse(dataLine.replace('data: ', '').trim());
+                if (parsed.token) {
+                  setStreamingMessage(prev => prev + parsed.token);
+                }
+              } catch (err) {}
             }
           }
         }
@@ -535,10 +543,14 @@ function WorkspaceContent() {
                     <div className="space-y-2">
                       <div className={`p-4 rounded-2xl text-xs leading-relaxed ${
                         m.role === 'user' 
-                          ? 'bg-indigo-600 text-white rounded-tr-none' 
+                          ? 'bg-indigo-600 text-white rounded-tr-none whitespace-pre-wrap' 
                           : 'bg-slate-850 border border-slate-800 text-slate-200 rounded-tl-none'
                       }`}>
-                        {m.content}
+                        {m.role === 'user' ? (
+                          m.content
+                        ) : (
+                          <MarkdownRenderer content={m.content} />
+                        )}
                       </div>
                       
                       {/* Citations list */}
@@ -571,9 +583,9 @@ function WorkspaceContent() {
                       AI
                     </div>
                     <div className="space-y-2 w-full">
-                      <div className="p-4 rounded-2xl bg-slate-850 border border-slate-800 text-slate-200 rounded-tl-none text-xs leading-relaxed whitespace-pre-wrap">
-                        {streamingMessage}
-                        <span className="inline-block w-1.5 h-3.5 bg-indigo-500 ml-1 animate-pulse"></span>
+                      <div className="p-4 rounded-2xl bg-slate-850 border border-slate-800 text-slate-200 rounded-tl-none text-xs leading-relaxed">
+                        <MarkdownRenderer content={streamingMessage} />
+                        <span className="inline-block w-1.5 h-3.5 bg-indigo-500 ml-1 animate-pulse align-middle"></span>
                       </div>
                       
                       {/* Streaming Citations */}
@@ -596,27 +608,33 @@ function WorkspaceContent() {
                     </div>
                   </div>
                 )}
-
+                
+                {/* Scroll Anchor */}
                 <div ref={messagesEndRef} />
               </div>
 
-              {/* Chat Input form */}
-              <div className="p-4 border-t border-slate-800 bg-slate-950/30 flex items-center gap-2">
-                <input 
-                  type="text" 
-                  value={inputMessage}
-                  onChange={(e) => setInputMessage(e.target.value)}
-                  onKeyDown={(e) => { if(e.key === 'Enter') handleSendMessage(); }}
-                  placeholder="Ask a question about this paper..."
-                  className="flex-1 bg-slate-900 border border-slate-800 focus:border-indigo-500 rounded-xl py-3 px-4 text-xs text-white placeholder-slate-500 outline-none transition-all"
-                />
-                <button 
-                  onClick={handleSendMessage}
-                  disabled={loadingChat || !inputMessage.trim()}
-                  className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:hover:bg-indigo-600 text-white p-3 rounded-xl shadow-lg shadow-indigo-600/20 transition-all"
+              {/* Chat Input Bar */}
+              <div className="p-4 border-t border-slate-800 bg-slate-900/40">
+                <form 
+                  onSubmit={handleSendMessage}
+                  className="relative flex items-center"
                 >
-                  <Send className="w-4 h-4" />
-                </button>
+                  <input
+                    type="text"
+                    value={inputMessage}
+                    onChange={(e) => setInputMessage(e.target.value)}
+                    placeholder={activeSessionId ? "Ask a question about the document..." : "Create a chat session first..."}
+                    disabled={!activeSessionId || loadingChat}
+                    className="w-full bg-slate-950/60 border border-slate-800/80 rounded-2xl py-3 pl-4 pr-12 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-all disabled:opacity-50"
+                  />
+                  <button
+                    type="submit"
+                    disabled={!inputMessage.trim() || loadingChat || !activeSessionId}
+                    className="absolute right-2 p-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white rounded-xl transition-all shadow-md shadow-indigo-600/20 active:scale-95"
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                  </button>
+                </form>
               </div>
             </>
           )}
@@ -630,8 +648,8 @@ function WorkspaceContent() {
                   <p className="text-xs text-slate-500">Synthesizing multi-level summary...</p>
                 </div>
               ) : summaryData ? (
-                <div className="glass-panel p-6 whitespace-pre-wrap text-xs leading-relaxed text-slate-200 border-slate-800/80 prose max-w-none">
-                  {summaryData}
+                <div className="glass-panel p-6 border-slate-800/80">
+                  <MarkdownRenderer content={summaryData} />
                 </div>
               ) : (
                 <div className="h-full flex flex-col items-center justify-center text-center p-8 gap-3">
@@ -657,8 +675,8 @@ function WorkspaceContent() {
                   <p className="text-xs text-slate-500">Critiquing methodology & finding research gaps...</p>
                 </div>
               ) : gapsData ? (
-                <div className="glass-panel p-6 whitespace-pre-wrap text-xs leading-relaxed text-slate-200 border-slate-800/80 prose max-w-none">
-                  {gapsData}
+                <div className="glass-panel p-6 border-slate-800/80">
+                  <MarkdownRenderer content={gapsData} />
                 </div>
               ) : (
                 <div className="h-full flex flex-col items-center justify-center text-center p-8 gap-3">

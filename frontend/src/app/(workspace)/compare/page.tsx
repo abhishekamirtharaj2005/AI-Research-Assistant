@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Columns, Sparkles, Check, Info } from 'lucide-react';
+import MarkdownRenderer from '@/components/MarkdownRenderer';
 
 interface Paper {
   id: number;
@@ -146,8 +147,8 @@ export default function ComparePage() {
               </div>
             </div>
           ) : matrixText ? (
-            <div className="glass-panel p-6 overflow-x-auto whitespace-pre-wrap leading-relaxed text-xs text-slate-200 prose max-w-none border-slate-800/80">
-              {matrixText}
+            <div className="glass-panel p-6 border-slate-800/80">
+              <MarkdownRenderer content={matrixText} />
             </div>
           ) : (
             <div className="glass-panel p-16 text-center flex flex-col items-center justify-center gap-3 border-dashed">

@@ -12,6 +12,7 @@ import {
   CheckCircle, 
   AlertCircle 
 } from 'lucide-react';
+import MarkdownRenderer from '@/components/MarkdownRenderer';
 
 interface Paper {
   id: number;
@@ -304,8 +305,8 @@ export default function ReportsPage() {
               </div>
 
               {/* Document Content View */}
-              <div className="flex-1 overflow-y-auto whitespace-pre-wrap leading-relaxed text-xs text-slate-200 prose max-w-none pt-4 max-h-[500px]">
-                {activeReport.content}
+              <div className="flex-1 overflow-y-auto pt-4 max-h-[500px]">
+                <MarkdownRenderer content={activeReport.content} />
               </div>
             </div>
           ) : (
