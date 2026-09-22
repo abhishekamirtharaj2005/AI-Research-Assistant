@@ -5,6 +5,7 @@ import requests
 from typing import List, Dict, Any, Optional
 from backend.app.config import settings
 from backend.app.models.schemas import UserSetting
+from backend.app.rag.agents import extract_provider_key
 
 class EmbeddingGenerator:
     """
@@ -168,16 +169,14 @@ class ChromaVectorStore:
         } for c in chunks]
         
         # Generate embeddings
-        api_key = settings_obj.api_keys_encrypted if settings_obj.api_keys_encrypted else ""
-        if settings_obj.model_provider == "openai" and not api_key:
-            api_key = settings.OPENAI_API_KEY
-        elif settings_obj.model_provider == "gemini" and not api_key:
-            api_key = settings.GEMINI_API_KEY
+        provider = settings_obj.model_provider if settings_obj else "openai"
+        api_key = extract_provider_key(settings_obj, provider)
             
         embedder = EmbeddingGenerator(
-            provider=settings_obj.model_provider,
-            model_name="text-embedding-3-small" if settings_obj.model_provider == "openai" else None,
-            api_key=api_key
+            provider=provider,
+            model_name="text-embedding-3-small" if provider == "openai" else None,
+            api_key=api_key,
+            ollama_url=api_key if (api_key and api_key.startswith("http")) else ""
         )
         embeddings = embedder.generate_embeddings(texts)
         
@@ -199,15 +198,13 @@ class ChromaVectorStore:
         collection = self._get_collection(user_id)
         
         # Generate query embedding
-        api_key = settings_obj.api_keys_encrypted if settings_obj.api_keys_encrypted else ""
-        if settings_obj.model_provider == "openai" and not api_key:
-            api_key = settings.OPENAI_API_KEY
-        elif settings_obj.model_provider == "gemini" and not api_key:
-            api_key = settings.GEMINI_API_KEY
+        provider = settings_obj.model_provider if settings_obj else "openai"
+        api_key = extract_provider_key(settings_obj, provider)
             
         embedder = EmbeddingGenerator(
-            provider=settings_obj.model_provider,
-            api_key=api_key
+            provider=provider,
+            api_key=api_key,
+            ollama_url=api_key if (api_key and api_key.startswith("http")) else ""
         )
         query_embedding = embedder.generate_embeddings([query])[0]
         

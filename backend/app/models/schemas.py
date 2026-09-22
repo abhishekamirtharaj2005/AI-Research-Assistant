@@ -64,10 +64,15 @@ class ChatSession(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"))
     title = Column(String, nullable=False)
+    paper_id = Column(Integer, ForeignKey("papers.id"), nullable=True)
+    paper_ids_json = Column(Text, default="[]")
+    model_provider = Column(String, nullable=True)
+    model_name = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     owner = relationship("User", back_populates="chat_sessions")
     messages = relationship("ChatMessage", back_populates="session", cascade="all, delete-orphan")
+    paper = relationship("Paper")
 
 class ChatMessage(Base):
     __tablename__ = "chat_messages"
@@ -174,10 +179,25 @@ class MessageResponse(BaseModel):
 
 class ChatSessionCreate(BaseModel):
     title: str
+    paper_id: Optional[int] = None
+    paper_ids: Optional[List[int]] = None
+    model_provider: Optional[str] = None
+    model_name: Optional[str] = None
+
+class ChatSessionUpdate(BaseModel):
+    title: Optional[str] = None
+    paper_id: Optional[int] = None
+    paper_ids: Optional[List[int]] = None
+    model_provider: Optional[str] = None
+    model_name: Optional[str] = None
 
 class ChatSessionResponse(BaseModel):
     id: int
     title: str
+    paper_id: Optional[int] = None
+    paper_ids: Optional[List[int]] = None
+    model_provider: Optional[str] = None
+    model_name: Optional[str] = None
     created_at: datetime
     
     class Config:

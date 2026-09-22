@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, declarative_base
 from backend.app.config import settings
 
@@ -27,3 +27,19 @@ def init_db():
     # Import all models here so that they are registered on Base metadata
     from backend.app.models.schemas import User, Paper, PaperChunk, ChatSession, ChatMessage, Report, UserSetting
     Base.metadata.create_all(bind=engine)
+    
+    # Safe non-destructive column migrations
+    with engine.connect() as conn:
+        columns = [
+            ("paper_id", "INTEGER"),
+            ("paper_ids_json", "TEXT DEFAULT '[]'"),
+            ("model_provider", "VARCHAR"),
+            ("model_name", "VARCHAR"),
+        ]
+        for col_name, col_type in columns:
+            try:
+                conn.execute(text(f"ALTER TABLE chat_sessions ADD COLUMN {col_name} {col_type}"))
+                conn.commit()
+            except Exception:
+                # Column already exists or table freshly created
+                pass

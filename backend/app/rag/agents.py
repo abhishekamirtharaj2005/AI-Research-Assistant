@@ -83,30 +83,69 @@ Outline a 12-month timeline divided into quarters, specifying what tasks, valida
 }
 
 # ==========================================
-# LLM API WRAPPERS
+# LLM API WRAPPERS & KEY RESOLVER
 # ==========================================
+
+def extract_provider_key(settings_obj: Optional[UserSetting], provider: str) -> str:
+    """
+    Extracts the API key or host URL for a specific provider.
+    Supports JSON dictionary storage: {"openai": "...", "gemini": "...", "anthropic": "...", "ollama": "..."}
+    Falls back to legacy single string or environment variables if not set.
+    """
+    raw_keys = settings_obj.api_keys_encrypted if settings_obj and settings_obj.api_keys_encrypted else ""
+    provider = provider.lower() if provider else "openai"
+    api_key = ""
+    
+    if raw_keys:
+        try:
+            parsed = json.loads(raw_keys)
+            if isinstance(parsed, dict):
+                api_key = parsed.get(provider, "")
+        except Exception:
+            # Legacy single string: assign to current provider if it matches default
+            if getattr(settings_obj, "model_provider", "") == provider:
+                api_key = raw_keys
+                
+    # Fallback to system environment variables
+    if not api_key:
+        if provider == "openai":
+            api_key = settings.OPENAI_API_KEY
+        elif provider == "gemini":
+            api_key = settings.GEMINI_API_KEY
+        elif provider == "anthropic":
+            api_key = settings.ANTHROPIC_API_KEY
+        elif provider == "ollama":
+            api_key = settings.OLLAMA_BASE_URL
+            
+    return api_key or ""
 
 def call_llm_stream(
     system_prompt: str, 
     user_prompt: str, 
     chat_history: List[Dict[str, str]], 
-    settings_obj: UserSetting
+    settings_obj: UserSetting,
+    model_override: Optional[Dict[str, str]] = None
 ) -> Generator[str, None, None]:
     """
     Calls LLM provider with streaming (SSE).
+    Supports model_override = {"model_provider": "...", "model_name": "..."}
     """
-    provider = settings_obj.model_provider
-    model_name = settings_obj.model_name
-    temperature = settings_obj.temperature
-    api_key = settings_obj.api_keys_encrypted if settings_obj.api_keys_encrypted else ""
-    
-    # Load default keys if user hasn't provided custom ones
-    if provider == "openai" and not api_key:
-        api_key = settings.OPENAI_API_KEY
-    elif provider == "gemini" and not api_key:
-        api_key = settings.GEMINI_API_KEY
-    elif provider == "anthropic" and not api_key:
-        api_key = settings.ANTHROPIC_API_KEY
+    provider = "openai"
+    model_name = "gpt-4o-mini"
+    temperature = 0.2
+
+    if settings_obj:
+        provider = settings_obj.model_provider or "openai"
+        model_name = settings_obj.model_name or "gpt-4o-mini"
+        temperature = settings_obj.temperature if settings_obj.temperature is not None else 0.2
+
+    if model_override:
+        if model_override.get("model_provider"):
+            provider = model_override["model_provider"]
+        if model_override.get("model_name"):
+            model_name = model_override["model_name"]
+
+    api_key = extract_provider_key(settings_obj, provider)
 
     messages = [{"role": "system", "content": system_prompt}]
     for msg in chat_history:
@@ -201,8 +240,9 @@ def call_llm_stream(
                 },
                 "stream": True
             }
+            ollama_base = (api_key if (api_key and api_key.startswith("http")) else settings.OLLAMA_BASE_URL).rstrip('/')
             res = requests.post(
-                f"{settings.OLLAMA_BASE_URL}/api/chat",
+                f"{ollama_base}/api/chat",
                 json=payload,
                 stream=True,
                 timeout=15
